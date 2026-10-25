@@ -28,6 +28,15 @@
     "switch": {
       "petting": {
         "name": "Pet teasing (cat sound)"
+      },
+      "drive": {
+        "name": "Drive"
+      },
+      "turn_left": {
+        "name": "Turn left"
+      },
+      "turn_right": {
+        "name": "Turn right"
       }
     }
   }

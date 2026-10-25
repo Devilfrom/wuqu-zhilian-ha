@@ -9,5 +9,5 @@
   "issue_tracker": "https://github.com/Devilfrom/hxj-lock-ha/issues",
   "loggers": ["wuqu_zhilian", "custom_components.wuqu_zhilian"],
   "requirements": ["cryptography>=42.0.0"],
-  "version": "0.2.0"
+  "version": "0.1.0"
 }

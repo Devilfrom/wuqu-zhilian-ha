@@ -29,6 +29,15 @@
     "switch": {
       "petting": {
         "name": "逗宠(猫叫)"
+      },
+      "drive": {
+        "name": "行驶"
+      },
+      "turn_left": {
+        "name": "左转"
+      },
+      "turn_right": {
+        "name": "右转"
       }
     }
   }

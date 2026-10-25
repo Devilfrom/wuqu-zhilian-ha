@@ -14,6 +14,8 @@ from .coordinator import WuQuCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
+from .video import WuQuVideoView
+
 PLATFORMS = [Platform.SWITCH, Platform.SELECT, Platform.NUMBER, Platform.SENSOR, Platform.BINARY_SENSOR, Platform.CAMERA]
 
 
@@ -42,6 +44,7 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
     entry.async_on_unload(lambda: listener.stop())
     hass.data[DOMAIN][entry.entry_id]["ws_task"] = ws_task
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    hass.http.register_view(WuQuVideoView(hass))
     return True
 
 

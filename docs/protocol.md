@@ -160,8 +160,16 @@ Connection: close
 - **关键坑**：WS 监听任务必须用 `hass.async_create_background_task`——`async_create_task` 会被 bootstrap 追踪，卡死「启动完成」信号 → supervisor API 永久 502（甚至需重启主机恢复）
 - 旧版 HA API：`async_forward_platforms` 已移除，须用 `async_forward_entry_setups`
 
-## 12. 待办
+## 12. 二期完成记录（2026-10-25）
 
-- [ ] WS 属性推送订阅语法修正（SUB_* 消息格式），实现毫秒级状态同步
-- [ ] 摄像头画面/Agora 音视频、云台控制(motorControl/motorPointData)、逗宠时长(voicePlayNumber)可做二期
-- [ ] 推送到 GitHub（同 hxj-lock-ha 仓库或新仓库）
+- **推送订阅结论**：云端 WS 无账号级广播（双连接实测 0 消息）；App 实时性来自 Matter 本地订阅（CHIP ReportCallback）。云路径 = 轮询制，集成采用 30s 轮询 + 指令后 4s 快速回读
+- **云台**：motorControl 枚举 0停/1上/2下/3左/4右（select 实体，方向 3s 自动回停）；motorPointIndex 收藏点 0-6（number 实体）
+- **红外夜视**（关/开/自动）、**清晰度**（高/中/低）、**灵敏度**（关/低/中/高）→ select 实体；**音量**/语音播报次数 → number 实体（音量 60↔80 双向实测 ✓）
+- **摄像头**：实时流为 Agora RTC（appId/appCertificate 经 batchGetProductAdvanceConfig 获取，HA 侧需原生 SDK 不现实）；接入 pictureUrl 快照通道（移动侦测触发上传）为 camera 实体
+- **实体生成改为物模型驱动**（queryDeviceDetails metadata），设备不上报当前值的属性也能建实体（云台/播报次数/快照）
+- **GitHub**：https://github.com/Devilfrom/wuqu-zhilian-ha（v0.2.0，手机号/账号ID/Agora证书已脱敏，含 docs/protocol.md 本报告脱敏版 + tools/wuqu_client.py PoC）
+
+## 13. 待办
+
+- [ ] Agora RTC 转流（若需实时画面，可做独立 add-on 用 linux SDK 转 RTSP）
+- [ ] HACS custom 仓库接入（hacs.json 已可加）

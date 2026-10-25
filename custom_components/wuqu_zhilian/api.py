@@ -185,6 +185,12 @@ class WuQuClient:
         """HTTP 控制通道（实测仅受理，实际生效走 WS）"""
         return await self._post(API_MOBILE + "userDevice/reportProperty",
                                 {"deviceId": dev_device_id, "properties": properties})
+    async def async_camera_config(self, product_id: str) -> dict:
+        """Agora appId/appCertificate（devProduct/batchGetProductAdvanceConfig）"""
+        data = await self._post(API_MOBILE + "devProduct/devProduct/batchGetProductAdvanceConfig",
+                                {"productList": product_id})
+        cfg = data.get(product_id) if isinstance(data, dict) else None
+        return cfg or {}
 
     # ---------- WebSocket ----------
     async def async_ws_token(self) -> str:
@@ -280,3 +286,4 @@ class WuQuWsListener:
         device_id = payload.get("deviceId")
         if device_id and self._on_update:
             self._on_update(str(device_id), payload)
+

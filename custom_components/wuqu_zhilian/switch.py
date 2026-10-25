@@ -5,6 +5,7 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import BOOLEAN_SWITCH_PROPS, DOMAIN, PROP_PETTING
+from .drive import DRIVE_PROPS, WuQuDriveSwitch, WuQuTurnSwitch
 from .helpers import entry_unique_id
 
 # Petting 枚举：0=停止 1=开始 2=正在逗宠(设备上报态)
@@ -15,11 +16,20 @@ async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
     listener = data["listener"]
+    coordinator.drive_on = getattr(coordinator, "drive_on", {})
+    coordinator.drive_speed = getattr(coordinator, "drive_speed", {})
     entities = []
     for did, item in coordinator.data.items():
         dev = item["device"]
         product_id = str(dev.get("productId") or "")
+        supported = item.get("supported_props") or set(item.get("properties", {}))
         props = item.get("properties", {})
+        if DRIVE_PROPS & supported:
+            coordinator.drive_on.setdefault(did, False)
+            coordinator.drive_speed.setdefault(did, 50)
+            entities.append(WuQuDriveSwitch(coordinator, did, product_id, listener, dev))
+            entities.append(WuQuTurnSwitch(coordinator, did, product_id, listener, dev, left=True))
+            entities.append(WuQuTurnSwitch(coordinator, did, product_id, listener, dev, left=False))
         if PROP_PETTING in props:
             entities.append(WuQuPettingSwitch(coordinator, did, product_id, listener))
         for prop, label in BOOLEAN_SWITCH_PROPS.items():

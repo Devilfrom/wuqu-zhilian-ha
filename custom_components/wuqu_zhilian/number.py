@@ -5,6 +5,7 @@ from homeassistant.components.number import NumberEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, NUMBER_PROPS
+from .drive import DRIVE_PROPS, WuQuDriveSpeed
 from .helpers import entry_unique_id
 
 
@@ -12,11 +13,17 @@ async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
     listener = data["listener"]
+    coordinator.drive_on = getattr(coordinator, "drive_on", {})
+    coordinator.drive_speed = getattr(coordinator, "drive_speed", {})
     entities = []
     for did, item in coordinator.data.items():
         dev = item["device"]
         product_id = str(dev.get("productId") or "")
         supported = item.get("supported_props") or set(item.get("properties", {}))
+        if DRIVE_PROPS & supported:
+            coordinator.drive_on.setdefault(did, False)
+            coordinator.drive_speed.setdefault(did, 50)
+            entities.append(WuQuDriveSpeed(coordinator, did, product_id, listener, dev))
         for prop, (label, lo, hi, step) in NUMBER_PROPS.items():
             if prop in supported:
                 entities.append(WuQuNumber(
