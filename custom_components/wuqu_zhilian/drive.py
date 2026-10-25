@@ -1,7 +1,11 @@
 """遥控实体类：行驶/左转/右转 开关（由 switch 平台装配）
 
-实测结论（2026-10-25）：底盘行驶只认 motorControl 枚举（0停/1上=前进/2下=后退/3左/4右）；
-leftSpeed/rightSpeed/leftRotation 云端写入无效。
+实测结论（2026-10-25）：
+- 底盘行驶只认 motorControl 枚举（0停/1前进/2后退/3左/4右）；
+  leftSpeed/rightSpeed/leftRotation 单发无效。
+- **前进/后退必须同时带非零轮速**：只发 motorControl=1 设备毫无反应
+  （轮速上报恒 0）；配 leftSpeed=rightSpeed=50 后设备上报 50/50。
+  转向(3/4)用设备内置速度，无需带轮速。
 单枚举互斥：行驶+左转 = 先转，左转关后自动恢复行驶。
 """
 from __future__ import annotations
@@ -12,7 +16,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .helpers import entry_unique_id
 
-MOTOR_STOP, MOTOR_FWD, MOTOR_BACK, MOTOR_LEFT, MOTOR_RIGHT = "0", "1", "2", "3", "4"
+MOTOR_STOP, MOTOR_FWD, MOTOR_BACK, MOTOR_LEFT, MOTOR_RIGHT = 0, 1, 2, 3, 4  # 设备只认整数
+DEFAULT_DRIVE_SPEED = 50  # 前进/后退默认轮速（0-100）
 
 
 class _MotorState:
@@ -21,9 +26,10 @@ class _MotorState:
     def __init__(self) -> None:
         self.drive_on = False
         self.turn = None  # None | "L" | "R"
+        self.speed = DEFAULT_DRIVE_SPEED
         self.peers: list = []
 
-    def value(self) -> str:
+    def value(self) -> int:
         if self.turn == "L":
             return MOTOR_LEFT
         if self.turn == "R":
@@ -33,6 +39,15 @@ class _MotorState:
     def push(self) -> None:
         for ent in self.peers:
             ent.async_write_ha_state()
+
+    def properties(self) -> dict:
+        """组指令：前进/后退必须带非零轮速，否则设备不动"""
+        val = self.value()
+        props = {"motorControl": val}
+        if val in (MOTOR_FWD, MOTOR_BACK) and self.speed > 0:
+            props["leftSpeed"] = self.speed
+            props["rightSpeed"] = self.speed
+        return props
 
 
 def get_motor_state(coordinator, did: str) -> _MotorState:
@@ -47,7 +62,7 @@ def get_motor_state(coordinator, did: str) -> _MotorState:
 
 async def send_motor(coordinator, listener, product_id: str, did: str) -> None:
     st = get_motor_state(coordinator, did)
-    await listener.send_control(product_id, did, {"motorControl": st.value()})
+    await listener.send_control(product_id, did, st.properties())
     coordinator.notify_command_sent()
 
 
