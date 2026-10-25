@@ -7,6 +7,8 @@
 2026-10-25 实测协议：
 - Agora 频道名 = md5(deviceId)（32 位小写 hex）；设备 uid = int(deviceId 后 8 位)
 - 电机：motorControl 枚举 0停/1前进/2后退/3左/4右；**前进/后退必须带非零轮速**
+- **设备保活/唤醒 = ping dp 递增心跳**（值必须 1..10 循环变化，常量无效；
+  停写数秒设备 UNPUB+LEFT 退出 Agora 频道进入休眠；操控台打开即自动 3s 心跳）
 - AccessToken2 为官方 Token007 算法的最小移植（仅 RTC 服务）
 """
 from __future__ import annotations
@@ -136,7 +138,7 @@ header .dot.on{background:#30d158}
   color:#fff;padding:9px 16px;border-radius:20px;font-size:13px;z-index:99;display:none;max-width:80%}
 </style></head><body>
 <div class="wrap">
-  <header><span class="name">__DEV_NAME__</span><span class="dot" id="dot"></span></header>
+  <header><span class="name">__DEV_NAME__</span><span id="ka" style="font-size:12px;color:#666">保活 --</span><span class="dot" id="dot"></span></header>
 
   <div class="videobox" id="videobox">
     <video id="video" autoplay playsinline muted></video>
@@ -359,6 +361,36 @@ async function pollStatus() {
   } catch (e) { /* 静默 */ }
 }
 setInterval(pollStatus, 5000); pollStatus();
+
+/* ---------- 保活心跳：唤醒休眠设备并保持在线 ----------
+   实测（2026-10-25）：设备 ping dp 值必须递增（1..10 循环）才认，
+   常量会被当陈旧数据忽略；停写数秒后设备 UNPUB+LEFT 退出 Agora 频道（休眠）。 */
+let kaCount = 0;
+async function keepalive() {
+  try {
+    const r = await fetch(BASE + '/motor', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'ping' })
+    });
+    const j = await r.json();
+    const el = $('ka');
+    if (j && j.ok) {
+      kaCount++;
+      el.textContent = '保活 #' + kaCount; el.style.color = '#30d158';
+    } else {
+      el.textContent = '保活失败'; el.style.color = '#ff453a';
+    }
+  } catch (e) {
+    $('ka').textContent = '保活失败'; $('ka').style.color = '#ff453a';
+  }
+}
+keepalive();
+const kaTimer = setInterval(keepalive, 3000);
+window.addEventListener('pagehide', () => clearInterval(kaTimer));
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { clearInterval(kaTimer); }
+  else { keepalive(); kaTimer = setInterval(keepalive, 3000); }
+});
 </script></body></html>"""
 
 
@@ -473,6 +505,16 @@ class WuQuMotorView(HomeAssistantView):
                 return self.json({"error": str(err)}, status_code=502)
             coordinator.notify_command_sent()
             return self.json({"ok": True, "action": action, "Petting": val})
+
+        if action == "ping":
+            # 设备保活：ping 值必须递增（1..10 循环）设备才认，常量会被当陈旧数据忽略
+            st_ping = get_motor_state(coordinator, device_id)
+            st_ping.ping_seq = st_ping.ping_seq % 10 + 1
+            try:
+                await listener.send_control(product_id, device_id, {"ping": st_ping.ping_seq})
+            except Exception as err:  # noqa: BLE001
+                return self.json({"error": str(err)}, status_code=502)
+            return self.json({"ok": True, "action": "ping", "ping": st_ping.ping_seq})
 
         st = get_motor_state(coordinator, device_id)
         st.speed = max(0, min(100, speed))

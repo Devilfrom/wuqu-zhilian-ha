@@ -28,6 +28,7 @@ class _MotorState:
         self.direction = "fwd"  # "fwd" | "back"（网页遥控台用后退；HA 开关仅前进）
         self.turn = None  # None | "L" | "R"
         self.speed = DEFAULT_DRIVE_SPEED
+        self.ping_seq = 0  # ping 心跳递增计数（1..10 循环，设备要求值变化）
         self.peers: list = []
 
     def value(self) -> int:
