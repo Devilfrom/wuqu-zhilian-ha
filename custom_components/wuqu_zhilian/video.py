@@ -91,12 +91,16 @@ PAGE = """<!DOCTYPE html>
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:#111;color:#eee;font:15px/1.5 system-ui,"PingFang SC","Microsoft YaHei";user-select:none}
-.wrap{max-width:480px;margin:0 auto;padding:0 0 24px;min-height:100vh;background:#111}
-header{display:flex;align-items:center;gap:10px;padding:14px 16px}
+.wrap{max-width:1280px;margin:0 auto;padding:0 16px 24px;min-height:100vh;background:#111}
+header{display:flex;align-items:center;gap:10px;padding:14px 4px}
 header .name{font-size:17px;font-weight:600}
 header .dot{width:8px;height:8px;border-radius:50%;background:#666;margin-left:auto}
 header .dot.on{background:#30d158}
-.videobox{position:relative;width:100%;aspect-ratio:16/9;background:#000;overflow:hidden}
+/* 响应式主区：窄屏堆叠（移动端），宽屏（HA 侧栏面板/桌面）双栏：视频左 + 控制右 */
+.main{display:grid;grid-template-columns:1fr;gap:18px;align-items:start}
+.controls{min-width:0}
+.videobox{position:relative;width:100%;aspect-ratio:16/9;background:#000;overflow:hidden;
+  border-radius:12px}
 #video{width:100%;height:100%;object-fit:contain;background:#000}
 .ov{position:absolute;display:flex;gap:6px;align-items:center;font-size:12px;color:#fff;
   background:rgba(0,0,0,.45);padding:4px 9px;border-radius:14px}
@@ -106,7 +110,7 @@ header .dot.on{background:#30d158}
 #found{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:9;background:#2d7d46;
   color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;display:none;white-space:nowrap;
   max-width:96%;overflow:hidden;text-overflow:ellipsis}
-.actions{display:flex;justify-content:space-around;padding:16px 8px 4px}
+.actions{display:flex;justify-content:space-around;padding:16px 0 4px}
 .act{display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:0;
   color:#ddd;font-size:12px;cursor:pointer;padding:6px 10px;border-radius:10px}
 .act .ico{font-size:22px;width:46px;height:46px;line-height:44px;border-radius:50%;
@@ -128,46 +132,60 @@ header .dot.on{background:#30d158}
 .speed{display:flex;align-items:center;gap:10px;padding:6px 34px 2px;font-size:13px;color:#999}
 .speed input{flex:1;accent-color:#0a84ff}
 .speed b{color:#eee;min-width:26px;text-align:right}
-.petbtn{display:block;width:calc(100% - 48px);margin:14px 24px 0;padding:14px;border:0;
+.petbtn{display:block;width:100%;margin:14px 0 0;padding:14px;border:0;
   border-radius:26px;background:#0a84ff;color:#fff;font-size:16px;font-weight:600;cursor:pointer}
 .petbtn:active{filter:brightness(.9)}
 .petbtn.running{background:#ff453a}
-#log{margin:16px 16px 0;padding:10px 12px;background:#0a0a0a;border-radius:10px;font-size:11px;
+#log{margin:16px 0 0;padding:10px 12px;background:#0a0a0a;border-radius:10px;font-size:11px;
   color:#777;max-height:96px;overflow:auto;white-space:pre-wrap;word-break:break-all}
 .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:rgba(0,0,0,.85);
   color:#fff;padding:9px 16px;border-radius:20px;font-size:13px;z-index:99;display:none;max-width:80%}
+/* ---- 宽屏（≥900px）：视频左、控制右，控制栏吸顶 ---- */
+@media (min-width:900px){
+  .main{grid-template-columns:minmax(0,1fr) 340px;gap:22px}
+  .videobox{max-height:calc(100vh - 104px)}
+  .controls{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto;
+    scrollbar-width:thin}
+  .actions{padding:4px 0}
+  .dpad{margin-top:14px}
+  .petbtn{width:100%}
+}
 </style></head><body>
 <div class="wrap">
   <header><span class="name">__DEV_NAME__</span><span id="ka" style="font-size:12px;color:#666">保活 --</span><span class="dot" id="dot"></span></header>
 
-  <div class="videobox" id="videobox">
-    <video id="video" autoplay playsinline muted></video>
-    <div id="found"></div>
-    <div class="ov tl"><span id="rssi">信号 --</span><span id="batt">🔋 --%</span></div>
-    <div class="ov tr"><span id="speedo">--/--</span></div>
-    <div class="ov bl"><button id="btnFs" title="全屏">⛶</button></div>
-    <div class="ov br"><button id="btnMute" title="静音">🔇</button></div>
+  <div class="main">
+    <div class="videobox" id="videobox">
+      <video id="video" autoplay playsinline muted></video>
+      <div id="found"></div>
+      <div class="ov tl"><span id="rssi">信号 --</span><span id="batt">🔋 --%</span></div>
+      <div class="ov tr"><span id="speedo">--/--</span></div>
+      <div class="ov bl"><button id="btnFs" title="全屏">⛶</button></div>
+      <div class="ov br"><button id="btnMute" title="静音">🔇</button></div>
+    </div>
+
+    <div class="controls">
+      <div class="actions">
+        <button class="act" id="btnSnap"><span class="ico">📷</span>截屏</button>
+        <button class="act" id="btnTalk"><span class="ico">🎤</span>对讲</button>
+        <button class="act" id="btnRec"><span class="ico">⏺</span>录屏</button>
+      </div>
+
+      <div class="dpad" id="dpad">
+        <button class="dp up"    data-act="fwd">▲</button>
+        <button class="dp left"  data-act="left">◀</button>
+        <div class="dp-c">按住<br>移动</div>
+        <button class="dp right" data-act="right">▶</button>
+        <button class="dp down"  data-act="back">▼</button>
+      </div>
+
+      <div class="speed"><span>速度</span><input type="range" id="speed" min="10" max="100" step="5" value="__SPEED__"><b id="speedVal">__SPEED__</b></div>
+
+      <button class="petbtn" id="btnPet">开始逗宠</button>
+
+      <div id="log"></div>
+    </div>
   </div>
-
-  <div class="actions">
-    <button class="act" id="btnSnap"><span class="ico">📷</span>截屏</button>
-    <button class="act" id="btnTalk"><span class="ico">🎤</span>对讲</button>
-    <button class="act" id="btnRec"><span class="ico">⏺</span>录屏</button>
-  </div>
-
-  <div class="dpad" id="dpad">
-    <button class="dp up"    data-act="fwd">▲</button>
-    <button class="dp left"  data-act="left">◀</button>
-    <div class="dp-c">按住<br>移动</div>
-    <button class="dp right" data-act="right">▶</button>
-    <button class="dp down"  data-act="back">▼</button>
-  </div>
-
-  <div class="speed"><span>速度</span><input type="range" id="speed" min="10" max="100" step="5" value="__SPEED__"><b id="speedVal">__SPEED__</b></div>
-
-  <button class="petbtn" id="btnPet">开始逗宠</button>
-
-  <div id="log"></div>
 </div>
 <div class="toast" id="toast"></div>
 <audio id="audio" autoplay></audio>
