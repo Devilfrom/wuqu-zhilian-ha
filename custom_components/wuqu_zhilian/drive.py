@@ -21,10 +21,11 @@ DEFAULT_DRIVE_SPEED = 50  # 前进/后退默认轮速（0-100）
 
 
 class _MotorState:
-    """设备行驶意图（挂载在 coordinator）：drive_on + turn(L/R/None) → motorControl 值"""
+    """设备行驶意图（挂载在 coordinator）：drive_on + direction + turn → motorControl 值"""
 
     def __init__(self) -> None:
         self.drive_on = False
+        self.direction = "fwd"  # "fwd" | "back"（网页遥控台用后退；HA 开关仅前进）
         self.turn = None  # None | "L" | "R"
         self.speed = DEFAULT_DRIVE_SPEED
         self.peers: list = []
@@ -34,7 +35,9 @@ class _MotorState:
             return MOTOR_LEFT
         if self.turn == "R":
             return MOTOR_RIGHT
-        return MOTOR_FWD if self.drive_on else MOTOR_STOP
+        if self.drive_on:
+            return MOTOR_BACK if self.direction == "back" else MOTOR_FWD
+        return MOTOR_STOP
 
     def push(self) -> None:
         for ent in self.peers:
@@ -102,6 +105,7 @@ class WuQuDriveSwitch(_DriveBase):
         return self._st.drive_on
 
     async def async_turn_on(self, **kwargs):
+        self._st.direction = "fwd"  # HA 开关只表达"前进"
         self._st.drive_on = True
         await send_motor(self.coordinator, self._listener, self._product_id, self._id)
         self._st.push()
