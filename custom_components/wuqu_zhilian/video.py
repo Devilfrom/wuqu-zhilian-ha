@@ -84,48 +84,50 @@ PAGE = """<!DOCTYPE html>
 <style>
 body{margin:0;background:#000;color:#eee;font:14px/1.5 system-ui;overflow:hidden}
 #video{width:100vw;height:100vh;object-fit:contain;background:#000}
-#status{position:fixed;left:0;right:0;bottom:0;padding:10px 14px;background:rgba(0,0,0,.65);font-size:13px;text-align:center;z-index:9}
+#status{position:fixed;left:0;right:0;bottom:0;padding:10px 14px;background:rgba(0,0,0,.65);font-size:13px;text-align:center;z-index:9;max-height:40%;overflow:auto}
+#found{position:fixed;top:10px;left:10px;z-index:9;background:#2d7d46;color:#fff;padding:8px 14px;border-radius:8px;font-size:15px;display:none}
 #retry{position:fixed;top:10px;right:10px;z-index:9;background:#2d7d46;color:#fff;border:0;padding:8px 14px;border-radius:8px;font-size:14px}
 </style></head><body>
 <video id="video" autoplay playsinline muted></video>
+<div id="found"></div>
 <button id="retry" onclick="location.reload()">重新连接</button>
 <div id="status">初始化…</div>
 <script>
 const CFG = __CONFIG__;
 const $ = id => document.getElementById(id);
-const log = m => { $("status").textContent = m; };
-let idx = 0, playing = false, client = null;
-async function tryChannel(ch) {
-  log(`尝试频道 ${idx + 1}/${CFG.channels.length} …`);
-  client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+const log = m => { const s = $("status"); s.textContent = m; };
+const lines = [];
+const logLine = m => { lines.push(m); if (lines.length > 12) lines.shift(); log(lines.join("\\n")); };
+const clients = [];
+let foundChannel = null;
+
+CFG.channels.forEach((ch, i) => {
+  const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
   client.on("user-published", async (user, mediaType) => {
-    if (mediaType !== "video") return;
-    await client.subscribe(user, "video");
-    user.videoTrack.play("video");
-    playing = true;
-    log(`✅ 收到视频流 (uid=${user.uid})`);
-  });
-  client.on("user-unpublished", () => { if (playing) { playing = false; log("对方停止推流"); } });
-  const tk = ch.token || CFG.channels[0].token;
-  await client.join(CFG.appId, ch.name, tk, 0);
-  await new Promise(r => setTimeout(r, 8000));
-  if (playing) return true;
-  await client.leave();
-  return false;
-}
-const LOCK = new URLSearchParams(location.search).get("ch");
-(async () => {
-  try {
-    const list = LOCK ? [{name: LOCK, token: null}] : CFG.channels;
-    for (; idx < list.length; idx++) {
-      const ch = LOCK
-        ? {name: LOCK, token: (CFG.channels.find(c => c.name === LOCK) || {}).token}
-        : list[idx];
-      if (await tryChannel(ch)) return;
+    if (foundChannel === ch.name) {
+      if (mediaType === "video") {
+        await client.subscribe(user, "video");
+        user.videoTrack.play("video");
+      }
+      return;
     }
-    log("暂无视频流（已停止尝试）。打开 App 设备视频画面后点右上角重新连接");
-  } catch (e) { log("出错: " + (e.message || e)); }
-})();
+    if (mediaType === "video") {
+      await client.subscribe(user, "video");
+      user.videoTrack.play("video");
+    }
+    foundChannel = ch.name;
+    $("found").style.display = "block";
+    $("found").textContent = "✅ 直播频道: " + ch.name + " (uid=" + user.uid + ")";
+    logLine("✅ 频道 " + ch.name + " 收到" + (mediaType === "video" ? "视频" : "音频") + "流 uid=" + user.uid);
+  });
+  client.on("user-unpublished", () => { if (foundChannel === ch.name) logLine("对方停止推流: " + ch.name); });
+  client.join(CFG.appId, ch.name, ch.token, 0)
+    .then(() => logLine("[" + (i + 1) + "/" + CFG.channels.length + "] 已加入 " + ch.name))
+    .catch(e => logLine("[" + (i + 1) + "/" + CFG.channels.length + "] 加入失败 " + ch.name + ": " + (e.message || e)));
+  clients.push(client);
+});
+logLine("已并行加入 " + CFG.channels.length + " 个候选频道，等待设备推流…");
+logLine("如无画面：打开 App 设备视频页停留几秒，设备即向对应频道推流");
 </script></body></html>"""
 
 
@@ -160,7 +162,18 @@ class WuQuVideoView(HomeAssistantView):
         if not app_id or not app_cert:
             return self.json({"error": "product has no agora config"}, status_code=404)
         mac = str(dev.get("mac") or "")
-        candidates = [device_id] + ([mac, mac.upper()] if mac else []) + [f"{product_id}{device_id}"]
+        candidates = [
+            device_id,                                   # deviceId
+            str(dev.get("id") or ""),                    # 设备记录 id
+            mac, mac.upper(),                            # mac 两种写法
+            f"{product_id}{device_id}",                  # productId+deviceId
+            str(dev.get("userId") or ""),                # 用户 id
+            str(dev.get("familyId") or ""),              # 家庭 id
+            product_id,                                  # productId 单独
+            f"cam_{device_id}", f"live_{device_id}",     # 带前缀变体
+            mac.replace(":", "").lower(),                # mac 去冒号
+            f"{product_id}_{device_id}",                 # 下划线连接
+        ]
         seen, channels = set(), []
         for ch in candidates:
             if ch and ch not in seen:
