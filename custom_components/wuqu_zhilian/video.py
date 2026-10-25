@@ -168,26 +168,18 @@ class WuQuVideoView(HomeAssistantView):
         mac = str(dev.get("mac") or "")
         uid_ = str(dev.get("userId") or "")
         fid_ = str(dev.get("familyId") or "")
+        # ✅ 2026-10-25 实测确认（双设备测试高亮）：频道名 = md5(deviceId)，
+        #    设备以 uid = int(deviceId 后 8 位) 推流。其余为兜底候选。
         md5_dev = hashlib.md5(device_id.encode()).hexdigest()
-        md5_pd = hashlib.md5(f"{product_id}{device_id}".encode()).hexdigest()
         candidates = [
+            md5_dev,                                     # md5(deviceId) —— 实测频道
             device_id,                                   # deviceId
-            str(dev.get("id") or ""),                    # 设备记录 id
-            mac, mac.upper(),                            # mac 两种写法
             f"{product_id}{device_id}",                  # productId+deviceId
-            uid_, fid_,                                  # 用户 id / 家庭 id
-            product_id,                                  # productId 单独
             f"cam_{device_id}", f"live_{device_id}",     # 带前缀变体
-            mac.replace(":", "").lower(),                # mac 去冒号
+            mac, mac.upper(),                            # mac 两种写法
+            product_id,                                  # productId 单独
+            md5_dev[:16],                                # md5 截断 16 位
             f"{product_id}_{device_id}",                 # 下划线连接
-            # —— 第二批：哈希/组合变体（RN 面板常见拼接算法）——
-            md5_dev, md5_dev[:16],                       # md5(deviceId) 全量/截断
-            md5_pd,                                      # md5(productId+deviceId)
-            f"{mac}_{device_id}",                        # mac_deviceId
-            f"{fid_}{device_id}",                        # familyId+deviceId
-            f"{uid_}_{device_id}",                       # userId_deviceId
-            f"device_{device_id}",                       # device_ 前缀
-            f"{device_id}_live",                         # _live 后缀
         ]
         seen, channels = set(), []
         for ch in candidates:
