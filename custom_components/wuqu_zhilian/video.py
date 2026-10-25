@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import hmac
 import logging
 import secrets
@@ -102,6 +103,8 @@ const clients = [];
 let foundChannel = null;
 
 CFG.channels.forEach((ch, i) => {
+  // 错峰 250ms 加入，避免 19 个并发 join 触发 Agora 频控/浏览器连接限制
+  setTimeout(() => {
   const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
   client.on("user-published", async (user, mediaType) => {
     if (foundChannel === ch.name) {
@@ -125,6 +128,7 @@ CFG.channels.forEach((ch, i) => {
     .then(() => logLine("[" + (i + 1) + "/" + CFG.channels.length + "] 已加入 " + ch.name))
     .catch(e => logLine("[" + (i + 1) + "/" + CFG.channels.length + "] 加入失败 " + ch.name + ": " + (e.message || e)));
   clients.push(client);
+  }, i * 250);
 });
 logLine("已并行加入 " + CFG.channels.length + " 个候选频道，等待设备推流…");
 logLine("如无画面：打开 App 设备视频页停留几秒，设备即向对应频道推流");
@@ -162,17 +166,28 @@ class WuQuVideoView(HomeAssistantView):
         if not app_id or not app_cert:
             return self.json({"error": "product has no agora config"}, status_code=404)
         mac = str(dev.get("mac") or "")
+        uid_ = str(dev.get("userId") or "")
+        fid_ = str(dev.get("familyId") or "")
+        md5_dev = hashlib.md5(device_id.encode()).hexdigest()
+        md5_pd = hashlib.md5(f"{product_id}{device_id}".encode()).hexdigest()
         candidates = [
             device_id,                                   # deviceId
             str(dev.get("id") or ""),                    # 设备记录 id
             mac, mac.upper(),                            # mac 两种写法
             f"{product_id}{device_id}",                  # productId+deviceId
-            str(dev.get("userId") or ""),                # 用户 id
-            str(dev.get("familyId") or ""),              # 家庭 id
+            uid_, fid_,                                  # 用户 id / 家庭 id
             product_id,                                  # productId 单独
             f"cam_{device_id}", f"live_{device_id}",     # 带前缀变体
             mac.replace(":", "").lower(),                # mac 去冒号
             f"{product_id}_{device_id}",                 # 下划线连接
+            # —— 第二批：哈希/组合变体（RN 面板常见拼接算法）——
+            md5_dev, md5_dev[:16],                       # md5(deviceId) 全量/截断
+            md5_pd,                                      # md5(productId+deviceId)
+            f"{mac}_{device_id}",                        # mac_deviceId
+            f"{fid_}{device_id}",                        # familyId+deviceId
+            f"{uid_}_{device_id}",                       # userId_deviceId
+            f"device_{device_id}",                       # device_ 前缀
+            f"{device_id}_live",                         # _live 后缀
         ]
         seen, channels = set(), []
         for ch in candidates:
